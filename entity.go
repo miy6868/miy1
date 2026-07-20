@@ -10,6 +10,7 @@ type Entity struct {
 	OnGround bool
 	InWater  bool
 	InLava   bool
+	StepUp   bool // auto-climb a single-block ledge when walking/swimming
 }
 
 const gravity = 32.0 // blocks/s^2
@@ -55,12 +56,29 @@ func (e *Entity) MoveAndCollide(w *World, dt float64) {
 	step := e.VX * dt * drag
 	e.X += step
 	if e.collides(w) {
-		if step > 0 {
-			e.X = math.Floor(e.X+e.W) - e.W - 1e-4
-		} else {
-			e.X = math.Floor(e.X) + 1 + 1e-4
+		// Auto-step: if the obstacle is a single block tall and there is
+		// headroom above it, lift the entity onto the ledge instead of
+		// stopping. This lets you walk up stairs and climb out of water
+		// onto a one-block-high shore. Only when grounded or swimming.
+		stepped := false
+		feetInLiquid := w.Block(int(math.Floor(cx)), int(math.Floor(e.Y+e.H-0.1))).Liquid()
+		if e.StepUp && step != 0 && (e.OnGround || e.InWater || feetInLiquid) {
+			const stepH = 1.02
+			e.Y -= stepH
+			if e.collides(w) {
+				e.Y += stepH // no headroom: revert and block
+			} else {
+				stepped = true
+			}
 		}
-		e.VX = 0
+		if !stepped {
+			if step > 0 {
+				e.X = math.Floor(e.X+e.W) - e.W - 1e-4
+			} else {
+				e.X = math.Floor(e.X) + 1 + 1e-4
+			}
+			e.VX = 0
+		}
 	}
 
 	// Y axis.
