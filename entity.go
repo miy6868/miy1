@@ -102,16 +102,18 @@ func NewItemDrop(x, y float64, s ItemStack) *ItemDrop {
 	}
 }
 
-// Particle is a short-lived visual effect (block break debris, etc.).
+// Particle is a short-lived visual effect (block break debris, embers,
+// spore motes...). Grav lets embers float instead of falling.
 type Particle struct {
 	X, Y, VX, VY float64
 	Life         float64
+	Grav         float64
 	R, G, B      uint8
 }
 
 func (w *World) SpawnBreakParticles(bx, by int, b Block) {
 	r, g, bl := blockAvgColor(b)
-	for i := 0; i < 6; i++ {
+	for i := 0; i < 8; i++ {
 		f := hashFloat(w.Seed, bx*7+i, by*13+i)
 		w.Particles = append(w.Particles, &Particle{
 			X: float64(bx) + 0.2 + 0.6*f,
@@ -119,6 +121,7 @@ func (w *World) SpawnBreakParticles(bx, by int, b Block) {
 			VX: (f - 0.5) * 6,
 			VY: -2 - 3*f,
 			Life: 0.4 + 0.3*f,
+			Grav: gravity * 0.5,
 			R: r, G: g, B: bl,
 		})
 	}
