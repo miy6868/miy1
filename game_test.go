@@ -213,3 +213,129 @@ func TestExplosion(t *testing.T) {
 		t.Error("distant player took explosion damage")
 	}
 }
+
+// TestLogPassable verifies tree trunks are non-solid so the player can walk
+// through them on the surface instead of being wall-blocked.
+func TestLogPassable(t *testing.T) {
+	if BLog.Solid() {
+		t.Fatal("log should be non-solid so players can walk through trees")
+	}
+	g := NewGame(1)
+	w := &g.World
+	bx, by := 480, 30
+	for x := bx - 1; x <= bx + 1; x++ {
+		for y := by - 3; y <= by; y++ {
+			w.SetBlock(x, y, BAir)
+		}
+	}
+	w.SetBlock(bx, by-1, BLog)
+	w.SetBlock(bx, by-2, BLog)
+	p := &g.Player
+	p.X = float64(bx) - 0.375 // hitbox straddles the trunk column
+	p.Y = float64(by) - p.H
+	if p.collides(w) {
+		t.Fatal("player collided with a log trunk it should pass through")
+	}
+}
+
+// TestStepUp verifies the player auto-climbs a single-block ledge while
+// walking, without needing to jump.
+func TestStepUp(t *testing.T) {
+	g := NewGame(7)
+	w := &g.World
+	bx, by := 520, 30
+	for x := bx - 2; x <= bx + 40; x++ {
+		for y := by - 4; y <= by + 2; y++ {
+			w.SetBlock(x, y, BAir)
+		}
+	}
+	for x := bx - 2; x <= bx + 2; x++ {
+		w.SetBlock(x, by+1, BStone) // low floor
+	}
+	for x := bx + 3; x <= bx + 40; x++ {
+		w.SetBlock(x, by, BStone)   // one-block-higher floor after the step
+		w.SetBlock(x, by+1, BStone) // fill beneath so it reads as ground
+	}
+	p := &g.Player
+	p.X = float64(bx - 1)
+	p.Y = float64(by+1) - p.H
+	p.VX, p.VY = 0, 0
+	for i := 0; i < 200; i++ {
+		p.VX = 5
+		p.MoveAndCollide(w, 1.0/60)
+	}
+	if p.X < float64(bx+3) {
+		t.Fatalf("player failed to auto-step onto the ledge: X=%.2f", p.X)
+	}
+	if p.Y > float64(by)-0.5 {
+		t.Fatalf("player did not rise onto the higher floor: Y=%.2f", p.Y)
+	}
+}
+
+// TestWaterExit verifies the player can climb from a water pool onto a
+// one-block shore (the "stuck in water" case).
+func TestWaterExit(t *testing.T) {
+	g := NewGame(55)
+	w := &g.World
+	bx, by := 700, 30
+	for x := bx - 3; x <= bx + 4; x++ {
+		for y := by - 4; y <= by + 3; y++ {
+			w.SetBlock(x, y, BAir)
+		}
+	}
+	for x := bx - 3; x <= bx + 4; x++ {
+		w.SetBlock(x, by+2, BStone) // pool/shore floor
+	}
+	for x := bx - 3; x <= bx; x++ {
+		w.SetBlock(x, by, BWater) // water column above the pool floor
+		w.SetBlock(x, by+1, BWater)
+	}
+	w.SetBlock(bx+1, by+1, BStone) // shore is one block higher than pool floor
+	for x := bx + 1; x <= bx + 4; x++ {
+		w.SetBlock(x, by+1, BStone)
+	}
+	p := &g.Player
+	p.X = float64(bx) - 1
+	p.Y = float64(by+2) - p.H // standing in the water on the pool floor
+	p.VX, p.VY = 0, 0
+	for i := 0; i < 400; i++ {
+		p.VX = 4
+		p.MoveAndCollide(w, 1.0/60)
+	}
+	if p.X < float64(bx+1) {
+		t.Fatalf("player failed to climb out of the water onto the shore: X=%.2f", p.X)
+	}
+}
+
+// TestMobStepUpChase verifies a chasing mob climbs a single-block ledge
+// toward the player instead of getting stuck against it.
+func TestMobStepUpChase(t *testing.T) {
+	g := NewGame(9)
+	w := &g.World
+	bx, by := 560, 30
+	for x := bx - 2; x <= bx + 8; x++ {
+		for y := by - 4; y <= by + 2; y++ {
+			w.SetBlock(x, y, BAir)
+		}
+	}
+	for x := bx - 2; x <= bx + 8; x++ {
+		w.SetBlock(x, by+1, BStone)
+	}
+	for x := bx + 4; x <= bx + 8; x++ {
+		w.SetBlock(x, by, BStone) // higher ledge on the player's side
+	}
+	p := &g.Player
+	p.X = float64(bx + 6)
+	p.Y = float64(by) - p.H
+	m := NewMob(MobZombie, float64(bx), float64(by+1))
+	startX := m.X
+	for i := 0; i < 600; i++ {
+		m.Update(g, 1.0/60)
+	}
+	if m.X <= startX+1 {
+		t.Fatalf("chasing mob made no progress toward player: X %.2f -> %.2f", startX, m.X)
+	}
+	if m.Y > float64(by)-0.3 {
+		t.Fatalf("chasing mob failed to climb the ledge: Y=%.2f", m.Y)
+	}
+}

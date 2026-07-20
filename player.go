@@ -43,7 +43,7 @@ type Player struct {
 
 func NewPlayer(x, y float64) Player {
 	p := Player{
-		Entity: Entity{X: x, Y: y, W: 0.75, H: 1.8},
+		Entity: Entity{X: x, Y: y, W: 0.75, H: 1.8, StepUp: true},
 		HP:     20, MaxHP: 20, Hunger: 20, Breath: 10,
 	}
 	return p

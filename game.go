@@ -47,6 +47,7 @@ type Game struct {
 	liquidAcc float64
 	spawnAcc  float64
 	tickAcc   float64
+	glows     []glowPoint
 	saveMsg   string
 	msgTimer  float64
 
@@ -204,6 +205,7 @@ func (g *Game) Update() error {
 	g.updateDrops(dt)
 	g.updateArrows(dt)
 	g.updateParticles(dt)
+	g.ambientParticles()
 	return nil
 }
 
@@ -446,12 +448,89 @@ func (g *Game) updateParticles(dt float64) {
 		if p.Life <= 0 {
 			continue
 		}
-		p.VY += gravity * 0.5 * dt
+		p.VY += p.Grav * dt
 		p.X += p.VX * dt
 		p.Y += p.VY * dt
 		kept = append(kept, p)
 	}
 	w.Particles = kept
+}
+
+// ambientParticles sprinkles atmosphere: torch embers, lava sparks, sculk
+// motes, amethyst glints, dripping water from dripstone.
+func (g *Game) ambientParticles() {
+	if len(g.World.Particles) > 220 {
+		return
+	}
+	w := &g.World
+	halfW := ScreenW / TileSize / 2
+	halfH := ScreenH / TileSize / 2
+	for i := 0; i < 6; i++ {
+		x := int(g.CamX) + g.rng.Intn(halfW*2+2) - halfW - 1
+		y := int(g.CamY) + g.rng.Intn(halfH*2+2) - halfH - 1
+		if y < 0 || y >= WorldH {
+			continue
+		}
+		fx := float64(x) + g.rng.Float64()
+		fy := float64(y) + g.rng.Float64()
+		switch w.Block(x, y) {
+		case BTorch:
+			if g.rng.Float64() < 0.35 {
+				w.Particles = append(w.Particles, &Particle{
+					X: float64(x) + 0.5, Y: float64(y) + 0.2,
+					VX: (g.rng.Float64() - 0.5) * 0.8, VY: -1.2 - g.rng.Float64(),
+					Life: 0.5 + g.rng.Float64()*0.5, Grav: -1,
+					R: 255, G: 180, B: 70,
+				})
+			}
+		case BLava:
+			if !w.Block(x, y-1).Liquid() && g.rng.Float64() < 0.25 {
+				w.Particles = append(w.Particles, &Particle{
+					X: fx, Y: float64(y),
+					VX: (g.rng.Float64() - 0.5) * 3, VY: -3 - g.rng.Float64()*3,
+					Life: 0.4 + g.rng.Float64()*0.4, Grav: gravity * 0.6,
+					R: 255, G: 140, B: 40,
+				})
+			}
+		case BSculk, BSculkSensor:
+			if g.rng.Float64() < 0.2 {
+				w.Particles = append(w.Particles, &Particle{
+					X: fx, Y: float64(y) - 0.1,
+					VX: (g.rng.Float64() - 0.5) * 0.5, VY: -0.4,
+					Life: 0.8 + g.rng.Float64(), Grav: -0.2,
+					R: 60, G: 210, B: 230,
+				})
+			}
+		case BAmethystCluster:
+			if g.rng.Float64() < 0.2 {
+				w.Particles = append(w.Particles, &Particle{
+					X: fx, Y: fy,
+					VX: 0, VY: -0.2,
+					Life: 0.5 + g.rng.Float64()*0.5, Grav: 0,
+					R: 210, G: 170, B: 250,
+				})
+			}
+		case BDripstone:
+			// Water drips off stalactites.
+			if w.Block(x, y+1) == BAir && g.rng.Float64() < 0.12 {
+				w.Particles = append(w.Particles, &Particle{
+					X: float64(x) + 0.4 + g.rng.Float64()*0.2, Y: float64(y) + 0.9,
+					VX: 0, VY: 1,
+					Life: 0.9, Grav: gravity * 0.6,
+					R: 110, G: 150, B: 220,
+				})
+			}
+		case BGlowBerries:
+			if g.rng.Float64() < 0.1 {
+				w.Particles = append(w.Particles, &Particle{
+					X: fx, Y: fy,
+					VX: 0, VY: 0.1,
+					Life: 0.7, Grav: 0,
+					R: 255, G: 215, B: 110,
+				})
+			}
+		}
+	}
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {

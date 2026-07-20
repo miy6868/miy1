@@ -124,7 +124,10 @@ func init() {
 	bi(BBedrock, BlockInfo{Name: "Bedrock", Solid: true, Opaque: true, Hardness: -1})
 	bi(BSand, BlockInfo{Name: "Sand", Solid: true, Opaque: true, Hardness: 0.7, BestTool: ToolShovel})
 	bi(BGravel, BlockInfo{Name: "Gravel", Solid: true, Opaque: true, Hardness: 0.8, BestTool: ToolShovel})
-	bi(BLog, BlockInfo{Name: "Oak Log", Solid: true, Opaque: true, Hardness: 2.4, BestTool: ToolAxe})
+	// Log is non-solid so the player can walk through tree trunks on the
+	// surface instead of being wall-blocked by them; still opaque so it
+	// renders as wood and casts shade.
+	bi(BLog, BlockInfo{Name: "Oak Log", Opaque: true, Hardness: 2.4, BestTool: ToolAxe})
 	bi(BPlanks, BlockInfo{Name: "Oak Planks", Solid: true, Opaque: true, Hardness: 2.2, BestTool: ToolAxe})
 	bi(BLeaves, BlockInfo{Name: "Leaves", Solid: true, Hardness: 0.35, Drops: IApple, DropMin: 0, DropMax: 1})
 	bi(BCoalOre, BlockInfo{Name: "Coal Ore", Solid: true, Opaque: true, Hardness: 3.2, BestTool: ToolPickaxe, MinTier: TierWood, NeedsTool: true, Drops: ICoal, DropMin: 1, DropMax: 2})

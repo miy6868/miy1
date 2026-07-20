@@ -10,6 +10,7 @@ type Entity struct {
 	OnGround bool
 	InWater  bool
 	InLava   bool
+	StepUp   bool // auto-climb a single-block ledge when walking/swimming
 }
 
 const gravity = 32.0 // blocks/s^2
@@ -55,12 +56,29 @@ func (e *Entity) MoveAndCollide(w *World, dt float64) {
 	step := e.VX * dt * drag
 	e.X += step
 	if e.collides(w) {
-		if step > 0 {
-			e.X = math.Floor(e.X+e.W) - e.W - 1e-4
-		} else {
-			e.X = math.Floor(e.X) + 1 + 1e-4
+		// Auto-step: if the obstacle is a single block tall and there is
+		// headroom above it, lift the entity onto the ledge instead of
+		// stopping. This lets you walk up stairs and climb out of water
+		// onto a one-block-high shore. Only when grounded or swimming.
+		stepped := false
+		feetInLiquid := w.Block(int(math.Floor(cx)), int(math.Floor(e.Y+e.H-0.1))).Liquid()
+		if e.StepUp && step != 0 && (e.OnGround || e.InWater || feetInLiquid) {
+			const stepH = 1.02
+			e.Y -= stepH
+			if e.collides(w) {
+				e.Y += stepH // no headroom: revert and block
+			} else {
+				stepped = true
+			}
 		}
-		e.VX = 0
+		if !stepped {
+			if step > 0 {
+				e.X = math.Floor(e.X+e.W) - e.W - 1e-4
+			} else {
+				e.X = math.Floor(e.X) + 1 + 1e-4
+			}
+			e.VX = 0
+		}
 	}
 
 	// Y axis.
@@ -102,16 +120,18 @@ func NewItemDrop(x, y float64, s ItemStack) *ItemDrop {
 	}
 }
 
-// Particle is a short-lived visual effect (block break debris, etc.).
+// Particle is a short-lived visual effect (block break debris, embers,
+// spore motes...). Grav lets embers float instead of falling.
 type Particle struct {
 	X, Y, VX, VY float64
 	Life         float64
+	Grav         float64
 	R, G, B      uint8
 }
 
 func (w *World) SpawnBreakParticles(bx, by int, b Block) {
 	r, g, bl := blockAvgColor(b)
-	for i := 0; i < 6; i++ {
+	for i := 0; i < 8; i++ {
 		f := hashFloat(w.Seed, bx*7+i, by*13+i)
 		w.Particles = append(w.Particles, &Particle{
 			X: float64(bx) + 0.2 + 0.6*f,
@@ -119,6 +139,7 @@ func (w *World) SpawnBreakParticles(bx, by int, b Block) {
 			VX: (f - 0.5) * 6,
 			VY: -2 - 3*f,
 			Life: 0.4 + 0.3*f,
+			Grav: gravity * 0.5,
 			R: r, G: g, B: bl,
 		})
 	}

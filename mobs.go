@@ -65,7 +65,7 @@ type Mob struct {
 func NewMob(k MobKind, x, y float64) *Mob {
 	inf := &mobInfo[k]
 	return &Mob{
-		Entity: Entity{X: x - inf.W/2, Y: y - inf.H, W: inf.W, H: inf.H},
+		Entity: Entity{X: x - inf.W/2, Y: y - inf.H, W: inf.W, H: inf.H, StepUp: !inf.Flying},
 		Kind:   k,
 		HP:     inf.MaxHP,
 		Dir:    1,
@@ -109,43 +109,83 @@ func (m *Mob) Update(g *Game, dt float64) {
 		return
 	}
 
+	w := &g.World
 	if chase {
-		if dx > 0.3 {
+		// Steer toward the player with a dead zone so the mob doesn't
+		// jitter back and forth when nearly aligned.
+		switch {
+		case dx > 0.5:
 			m.Dir = 1
-		} else if dx < -0.3 {
+		case dx < -0.5:
 			m.Dir = -1
+		default:
+			m.Dir = 0
+		}
+		// Skeletons kite: back away when the player gets too close so
+		// they keep room to shoot.
+		if m.Kind == MobSkeleton && dist < 5 {
+			m.Dir = -m.Dir
 		}
 	} else if m.DirTimer <= 0 {
 		m.DirTimer = 2 + g.rng.Float64()*3
 		r := g.rng.Float64()
-		if r < 0.4 {
+		switch {
+		case r < 0.45:
 			m.Dir = 0
-		} else if r < 0.7 {
+		case r < 0.72:
 			m.Dir = 1
-		} else {
+		default:
 			m.Dir = -1
+		}
+	}
+
+	// Ledge avoidance: idle/wandering mobs turn back at cliffs instead of
+	// marching off. Chasers commit so they can still pursue down drops.
+	if !chase && m.OnGround && m.Dir != 0 {
+		aheadX := mx + m.Dir*(m.W/2+0.25)
+		footY := m.Y + m.H
+		if !solidAt(w, aheadX, footY+0.3) && !solidAt(w, aheadX, footY+1.3) {
+			m.Dir = -m.Dir
+			m.DirTimer = 1 + g.rng.Float64()
 		}
 	}
 
 	speed := inf.Speed
 	if !chase {
-		speed *= 0.5
+		speed *= 0.45
 	}
-	m.VX = m.Dir * speed
+	// Ease toward the target speed rather than snapping, so motion and
+	// knockback recovery look smooth.
+	target := m.Dir * speed
+	m.VX += (target - m.VX) * math.Min(1, dt*12)
 
-	// Jump over obstacles / out of water.
-	if m.OnGround || m.InWater {
-		frontX := mx + m.Dir*(m.W/2+0.3)
-		footY := m.Y + m.H - 0.3
-		if solidAt(&g.World, frontX, footY) || (m.InWater && chase && dy < -1) {
-			m.VY = -10
-		}
-		// Slimes hop constantly.
-		if m.Kind == MobSlime && m.Dir != 0 {
-			m.VY = -8
+	// Jumping. Auto step-up already clears single-block ledges, so only
+	// jump for taller walls, to climb toward a player above, or to bob
+	// out of water.
+	if (m.OnGround || m.InWater) && m.Dir != 0 {
+		frontX := mx + m.Dir*(m.W/2+0.25)
+		lowBlocked := solidAt(w, frontX, m.Y+m.H-0.3)
+		highBlocked := solidAt(w, frontX, m.Y+m.H-1.4)
+		needClimb := chase && dy < -1.3 && solidAt(w, mx, m.Y+m.H+0.4)
+		if (lowBlocked && highBlocked) || needClimb {
+			if !solidAt(w, mx, m.Y-0.6) { // headroom before committing
+				m.VY = -11.5
+			}
 		}
 	}
-	m.MoveAndCollide(&g.World, dt)
+	if m.InWater {
+		// Swim up toward the surface (or the player if above).
+		if chase && dy < 0 {
+			m.VY = -6
+		} else if m.VY > 1 {
+			m.VY = 1
+		}
+	}
+	// Slimes hop along the ground.
+	if m.Kind == MobSlime && m.OnGround && m.Dir != 0 {
+		m.VY = -8
+	}
+	m.MoveAndCollide(w, dt)
 	if m.InLava {
 		m.Hurt(g, 4*dt, 0)
 	}

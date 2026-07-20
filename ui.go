@@ -30,39 +30,52 @@ func (g *Game) drawHUD(screen *ebiten.Image) {
 		ebitenutil.DebugPrintAt(screen, name, ScreenW/2-len(name)*3, hbY-16)
 	}
 
-	// Hearts.
+	// Hearts with dark outline; low HP hearts jitter.
 	for i := 0; i < 10; i++ {
 		x := float32(hbX + i*15)
 		y := float32(hbY - 34)
+		if p.HP <= 6 && !p.Dead {
+			y += float32(int(g.World.Time*10+float64(i)*3)%3) - 1
+		}
 		full := p.HP >= float64((i+1)*2)
 		half := !full && p.HP > float64(i*2)
-		c := color.RGBA{60, 20, 20, 255}
+		drawHeart(screen, x+1, y+1, color.RGBA{0, 0, 0, 160})
+		c := color.RGBA{55, 22, 22, 255}
 		if full {
-			c = color.RGBA{225, 40, 40, 255}
+			c = color.RGBA{230, 45, 45, 255}
 		} else if half {
 			c = color.RGBA{170, 40, 40, 255}
 		}
 		drawHeart(screen, x, y, c)
+		if full || half {
+			vector.DrawFilledRect(screen, x+2, y+1, 2, 2, color.RGBA{255, 160, 160, 255}, false)
+		}
 	}
-	// Hunger.
+	// Hunger drumsticks.
 	for i := 0; i < 10; i++ {
-		x := float32(hbX + 9*slotPx - 15 - i*15)
-		y := float32(hbY - 34)
+		x := float32(hbX + 9*slotPx - 13 - i*15)
+		y := float32(hbY - 29)
 		full := p.Hunger >= float64((i+1)*2)
 		half := !full && p.Hunger > float64(i*2)
-		c := color.RGBA{60, 45, 20, 255}
+		c := color.RGBA{55, 40, 20, 255}
 		if full {
-			c = color.RGBA{200, 130, 40, 255}
+			c = color.RGBA{205, 130, 45, 255}
 		} else if half {
 			c = color.RGBA{150, 100, 40, 255}
 		}
-		vector.DrawFilledRect(screen, x, y, 11, 11, c, false)
+		vector.DrawFilledCircle(screen, x+1, y+1, 5.5, color.RGBA{0, 0, 0, 160}, true)
+		vector.DrawFilledCircle(screen, x, y, 5.5, c, true)
+		if full || half {
+			vector.DrawFilledCircle(screen, x-1.5, y-1.5, 1.6, color.RGBA{240, 190, 120, 255}, true)
+		}
 	}
 	// Breath bubbles when underwater.
 	if p.Breath < 10 {
 		for i := 0; i < int(p.Breath); i++ {
-			x := float32(hbX + 9*slotPx - 15 - i*15)
-			vector.DrawFilledRect(screen, x, float32(hbY-50), 10, 10, color.RGBA{90, 150, 235, 255}, false)
+			x := float32(hbX+9*slotPx-13-i*15) + 1
+			y := float32(hbY - 46)
+			vector.DrawFilledCircle(screen, x, y, 5, color.NRGBA{100, 160, 240, 235}, true)
+			vector.DrawFilledCircle(screen, x-1.5, y-1.5, 1.5, color.RGBA{210, 230, 255, 255}, true)
 		}
 	}
 	// XP.
@@ -86,12 +99,18 @@ func drawHeart(screen *ebiten.Image, x, y float32, c color.RGBA) {
 }
 
 func (g *Game) drawSlot(screen *ebiten.Image, x, y int, s *ItemStack, selected bool) {
-	bg := color.RGBA{25, 25, 30, 200}
-	border := color.RGBA{90, 90, 100, 255}
+	bg := color.RGBA{22, 22, 28, 205}
+	border := color.RGBA{85, 85, 100, 255}
 	if selected {
-		border = color.RGBA{240, 240, 240, 255}
+		bg = color.RGBA{40, 40, 52, 225}
+		border = color.RGBA{250, 250, 250, 255}
+		// Soft highlight halo behind the selected slot.
+		vector.DrawFilledRect(screen, float32(x)-3, float32(y)-3, slotPx+4, slotPx+4, color.NRGBA{255, 255, 255, 26}, false)
 	}
 	vector.DrawFilledRect(screen, float32(x), float32(y), slotPx-2, slotPx-2, bg, false)
+	// Inner bevel: light top edge, dark bottom edge.
+	vector.DrawFilledRect(screen, float32(x), float32(y), slotPx-2, 2, color.NRGBA{255, 255, 255, 24}, false)
+	vector.DrawFilledRect(screen, float32(x), float32(y+slotPx-4), slotPx-2, 2, color.RGBA{0, 0, 0, 90}, false)
 	vector.StrokeRect(screen, float32(x), float32(y), slotPx-2, slotPx-2, 2, border, false)
 	if s != nil && !s.Empty() {
 		op := &ebiten.DrawImageOptions{}
@@ -265,9 +284,18 @@ func (g *Game) recipeOrigin() (int, int) {
 }
 
 func (g *Game) drawUI(screen *ebiten.Image) {
-	vector.DrawFilledRect(screen, 0, 0, ScreenW, ScreenH, color.RGBA{0, 0, 0, 120}, false)
+	vector.DrawFilledRect(screen, 0, 0, ScreenW, ScreenH, color.RGBA{0, 0, 0, 130}, false)
 	p := &g.Player
 	ox, oy := g.invOrigin()
+
+	// Panel backdrop framing the whole UI area.
+	px0 := float32(ox - slotPx - 24)
+	py0 := float32(oy - 3*slotPx - 64)
+	pw := float32(InvCols*slotPx + slotPx + 24 + 340)
+	ph := float32(ScreenH) - py0 - 12
+	vector.DrawFilledRect(screen, px0, py0, pw, ph, color.RGBA{16, 16, 22, 215}, false)
+	vector.DrawFilledRect(screen, px0, py0, pw, 2, color.NRGBA{255, 255, 255, 35}, false)
+	vector.StrokeRect(screen, px0, py0, pw, ph, 2, color.RGBA{95, 95, 115, 255}, false)
 
 	title := map[UIMode]string{
 		UIInventory:  "Inventory & Crafting",
